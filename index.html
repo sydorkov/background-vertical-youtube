@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fullscreen YouTube Player</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            border: 0;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: black;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .video-container {
+            position: absolute;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+        iframe {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 177.78vh;
+            height: 100vh;
+            transform: translate(-50%, -50%);
+        }
+        @media (min-aspect-ratio: 16/9) {
+            iframe {
+                width: 100vw;
+                height: 56.25vw;
+            }
+        }
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 5;
+            transition: opacity 0.5s;
+        }
+        .hidden {
+            opacity: 0;
+        }
+        input, button, input[type="range"] {
+            padding: 5px;
+        }
+        .slider-container {
+            margin-top: 10px;
+        }
+        .saved-videos {
+            margin-top: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .saved-video {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 5px;
+        }
+        .saved-video button {
+            margin-left: 5px;
+        }
+    </style>
+</head>
+<body>
+<div class="controls" id="controls">
+    <input type="text" id="videoUrl" placeholder="Enter YouTube URL" />
+    <button onclick="changeVideo()">Load Video</button>
+    <button onclick="openFullscreen()">Fullscreen</button>
+    <div class="slider-container">
+        <input type="range" id="videoOffset" min="-50" max="50" value="0" oninput="adjustVideoPosition()">
+    </div>
+    <div class="saved-videos" id="savedVideos"></div>
+</div>
+<div class="video-container" id="videoContainer">
+    <iframe id="player" frameborder="0" allowfullscreen></iframe>
+</div>
+<script>
+    let hideControlsTimeout;
+
+    function openFullscreen() {
+        if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen();
+        }
+    }
+
+    function changeVideo(save = true) {
+        const input = document.getElementById("videoUrl").value;
+        const videoId = extractVideoId(input);
+        if (videoId) {
+            const iframe = document.getElementById("player");
+            iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=1`;
+            if (save) saveVideo(input);
+            setTimeout(() => sendSpaceKey(iframe), 2000);
+        } else {
+            alert("Invalid YouTube URL");
+        }
+    }
+
+    function extractVideoId(url) {
+        const regExp = /^.*(?:youtu.be\/|v\/|\/u\/\w\/|embed\/|watch\?v=|&v=|youtu.be\/|\/v=)([^#&?]*).*/;
+        const match = url.match(regExp);
+        return (match && match[1].length === 11) ? match[1] : null;
+    }
+
+    function sendSpaceKey(iframe) {
+        iframe.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+    }
+
+    function adjustVideoPosition() {
+        let sliderValue = document.getElementById("videoOffset").value;
+        let screenWidth = window.innerWidth;
+        let offset = (sliderValue / 100) * screenWidth;
+        document.getElementById("player").style.transform = `translate(calc(-50% + ${offset}px), -50%)`;
+    }
+
+    function saveVideo(url) {
+        let videos = JSON.parse(localStorage.getItem("savedVideos")) || [];
+        let name = prompt("Enter video name:", `Video ${videos.length + 1}`) || `Video ${videos.length + 1}`;
+
+        if (!videos.some(video => video.url === url)) {
+            videos.unshift({ url, name });
+            localStorage.setItem("savedVideos", JSON.stringify(videos));
+        }
+        localStorage.setItem("lastVideo", url);
+        renderSavedVideos();
+    }
+
+    function deleteVideo(url) {
+        let videos = JSON.parse(localStorage.getItem("savedVideos")) || [];
+        videos = videos.filter(video => video.url !== url);
+        localStorage.setItem("savedVideos", JSON.stringify(videos));
+        renderSavedVideos();
+    }
+
+    function renderSavedVideos() {
+        let videos = JSON.parse(localStorage.getItem("savedVideos")) || [];
+        const container = document.getElementById("savedVideos");
+        container.innerHTML = "";
+        videos.forEach((video) => {
+            const div = document.createElement("div");
+            div.classList.add("saved-video");
+
+            const btn = document.createElement("button");
+            btn.textContent = video.name;
+            btn.onclick = () => { document.getElementById("videoUrl").value = video.url; changeVideo(); };
+
+            const deleteBtn = document.createElement("button");
+            deleteBtn.textContent = "X";
+            deleteBtn.onclick = () => deleteVideo(video.url);
+
+            div.appendChild(btn);
+            div.appendChild(deleteBtn);
+            container.appendChild(div);
+        });
+    }
+
+    document.addEventListener("mousemove", () => {
+        document.getElementById("controls").classList.remove("hidden");
+        clearTimeout(hideControlsTimeout);
+        hideControlsTimeout = setTimeout(() => {
+            document.getElementById("controls").classList.add("hidden");
+        }, 5000);
+    });
+
+    window.onload = function() {
+        renderSavedVideos();
+        const lastVideo = localStorage.getItem("lastVideo");
+        if (lastVideo) {
+            document.getElementById("videoUrl").value = lastVideo;
+            changeVideo(false);
+        }
+    };
+</script>
+</body>
+</html>
